@@ -3,10 +3,11 @@
 
 # In[1]:
 
-
+from firebase import firebase
 import mysql.connector  # imported sql.connector for using mysql
 from tkinter import *  # imported tkinter module for GUI
-import json, requests  # imported JSON and request module for handling data from API's
+import json
+import requests  # imported JSON and request module for handling data from API's
 from tkinter import ttk  # specially for combobox function for dropdown menus
 from tkinter import messagebox as tmsg  # for using message box in GUI
 from PIL import Image, ImageTk  # PIL for using image formats in tkinter like jpg,jpeg etc...
@@ -20,6 +21,8 @@ class GUI(Tk):  # CLASS GUI
         self.user = StringVar()
         self.passwd = StringVar()
         self.db = StringVar()
+        self.db_variable = IntVar()
+
         try:
             self.conn = mysql.connector.connect(host="localhost", user="root", passwd="7070134898aA$", database="pygui")
             cursor = self.conn.cursor()
@@ -36,18 +39,26 @@ class GUI(Tk):  # CLASS GUI
                                ' Email VARCHAR(50) NOT NULL, Password VARCHAR(50) NOT NULL, PRIMARY KEY(Email))')
                 self.email_list = cursor.fetchall()
                 print("Email list:\n", self.email_list)
-                print("table not present")
+                print("table not present, so created one.")
         except:
-            tmsg.Message("Connection can't be made to the database for some reason."
-                         " You can't use database modules(Register/Login)\n. "
-                         "NOTE:Enter 'admin' as email and password in Login to Use.")
+
+            self.fyrebase = firebase.FirebaseApplication("https://currency-converter-test.firebaseio.com/", None)
+            result = self.fyrebase.get("/currency-converter-test/:login", '')
+            self.rows = result.values()
+            self.email_list = []
+            for row in self.rows:
+                self.email_list.append(row['Email'])
+            print(self.email_list)
+
         # gui-geometry
         self.geometry("1200x800")
         self.title("Currency Converter- Login / Signup")
         self.minsize(1200, 800)
         self.maxsize(1200, 800)
-        self.image = Image.open('money4.jpg')
-        self.photo = ImageTk.PhotoImage(self.image)
+        #self['background'] = 'black'
+        self.image = Image.open('background4.jpeg')
+        resized = self.image.resize((1200, 800), Image.ANTIALIAS)
+        self.photo = ImageTk.PhotoImage(resized)
         self.label = Label(self, image=self.photo)
         self.wm_iconbitmap("logo.ico")
 
@@ -67,19 +78,18 @@ class GUI(Tk):  # CLASS GUI
                              font=("times new roman", 15, "bold"),
                              padx=200,
                              pady=10,
-                             fg="white",
-                             bg="black").place(x=270, y=120)
+                             fg="black",
+                             bg="white").place(x=270, y=120)
 
         # signup
         # light blue/2/3/4 cadet blue1/2/3/4
-        signup_frame = Frame(self, width=460, height=500, bg="black")
-        signup_frame.place(x=650, y=240)
+        signup_frame = Frame(self, width=460, height=500, bg="LightSteelBlue")
+        signup_frame.place(x=650, y=220)
 
         # variable
 
         self.firstnamevar = StringVar()
         self.firstnamevar.set("")
-
         self.lastnamevar = StringVar()
         self.firstnamevar.set("")
 
@@ -159,9 +169,9 @@ class GUI(Tk):  # CLASS GUI
             command=self.register).place(x=150, y=410)
 
         # login
-        login_frame = Frame(self, width=340, height=500, bg="black")
-        login_frame.place(x=100, y=240)
-
+        login_frame = Frame(self, width=340, height=500, bg="LightSteelBlue")
+        login_frame.place(x=100, y=220)
+        # Label(self, text="", bg="black", padx=10, width=200, pady=50).place(x=2, y=720)
         Button(
             login_frame,
             text="SIGN IN",
@@ -251,21 +261,36 @@ class GUI(Tk):  # CLASS GUI
             tmsg.showinfo('Email error', 'User Already Exists')
         elif "@" not in self.emailvar.get() and "." not in self.emailvar.get():
             tmsg.showerror('Error', 'Invalid email')
-
         else:
-            cursor = self.conn.cursor()
             try:
-                cursor.execute('Create table login(Firstname VARCHAR(50) NOT NULL, lastname VARCHAR(50) NOT NULL,'
-                               ' Email VARCHAR(50) NOT NULL, Password VARCHAR(50) NOT NULL, PRIMARY KEY(Email))')
+                cursor = self.conn.cursor()
                 cursor.execute('INSERT INTO login values(%s, %s, %s, %s)',
-                               (self.firstnamevar.get(),
-                                self.lastnamevar.get(), self.emailvar.get(), self.passwordvar.get()))
+                                   (self.firstnamevar.get(),
+                                    self.lastnamevar.get(), self.emailvar.get(), self.passwordvar.get()))
+
+                self.conn.commit()
+                self.fyrebase = firebase.FirebaseApplication("https://currency-converter-test.firebaseio.com/", None)
+                data = {
+
+                    "Firstname": f"{self.firstnamevar.get()}",
+                    "Lastname": f"{self.lastnamevar.get()}",
+                    "Email": f"{self.emailvar.get()}",
+                    "Password": f"{self.passwordvar.get()}"
+                }
+
+                self.fyrebase.post("/currency-converter-test/:login", data)
+                tmsg.showinfo('Success', 'User created successfully')
             except:
-                cursor.execute('INSERT INTO login values(%s, %s, %s, %s)',
-                               (self.firstnamevar.get(),
-                                self.lastnamevar.get(), self.emailvar.get(), self.passwordvar.get()))
-            tmsg.showinfo('Success', 'User created successfully')
-            self.conn.commit()
+                data = {
+
+                    "Firstname": f"{self.firstnamevar.get()}",
+                    "Lastname": f"{self.lastnamevar.get()}",
+                    "Email": f"{self.emailvar.get()}",
+                    "Password": f"{self.passwordvar.get()}"
+                }
+
+                self.fyrebase.post("/currency-converter-test/:login", data)
+                tmsg.showinfo('Success', 'User created successfully')
 
     def login(self):
         if self.verifyemail.get() == "":
@@ -278,17 +303,40 @@ class GUI(Tk):  # CLASS GUI
             self.firstpage()
 
         else:
-            cursor = self.conn.cursor()
-            cursor.execute(f'select Password from login where Email = "{self.verifyemail.get()}"')
-            password = cursor.fetchall()
-            print(type(password))
-            print(password)
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute(f'select Password from login where Email = "{self.verifyemail.get()}"')
+                password = cursor.fetchall()
+                print(type(password))
+                print(password)
 
-            if (self.verifypassword.get(),) in password:
-                tmsg.showinfo('Success', 'You are logged in successfully.')
-                self.firstpage()
-            else:
-                tmsg.showinfo('login', "Incorrect Username or Password")
+                if (self.verifypassword.get(),) in password:
+                    tmsg.showinfo('Success', 'You are logged in successfully.')
+                    self.firstpage()
+                else:
+                    tmsg.showinfo('login', "Incorrect Username or Password")
+
+            except:
+                self.fyrebase = firebase.FirebaseApplication("https://currency-converter-test.firebaseio.com/", None)
+                result = self.fyrebase.get("/currency-converter-test/:login", '')
+                self.rows = result.values()
+                self.email_list = []
+                for row in self.rows:
+                    self.email_list.append(row['Email'])
+
+                if self.verifyemail.get() in self.email_list:
+                    for row in self.rows:
+                        if row['Email'] == self.verifyemail.get():
+                            if row['Password'] == self.verifypassword.get():
+                                tmsg.showinfo('Success', 'You are logged in successfully.')
+                                self.firstpage()
+                                break
+                            else:
+                                tmsg.showinfo('login', "Incorrect Password")
+                        else:
+                            print()
+                else:
+                    tmsg.showinfo('login', "User doesn't exist.")
 
     def firstpage(self):
         self.geometry("1000x800")  # GUI window of size 1000x800
@@ -484,6 +532,8 @@ class GUI(Tk):  # CLASS GUI
     def sql(self):
         # sql connection...
         # connecting to database..
+
+        self.db_variable.set(0)
         try:
 
             self.conn = mysql.connector.connect(host="localhost", user=self.user.get(), passwd=self.passwd.get())
@@ -505,16 +555,20 @@ class GUI(Tk):  # CLASS GUI
             self.cursor.execute('CREATE TABLE counts(DATE TEXT, FROM_CURRENCY TEXT, TO_CURRENCY TEXT, AMOUNT TEXT,'
                                 ' RESULT TEXT)')
             self.cursor.close()
+            self.db_variable.set(1)
         except Exception as e:  # prompt warning if unable to connect.. either username or password entered is wrong..
+
             tmsg.askretrycancel(title="Warning", message="Invalid Username or Password")
 
     # GUI PART
     def app_gui(self):
 
         # using pillow for opening jpg images, as we can't use jpg or jpeg images directly in tkinter
-
-        self.image = Image.open('newpic.jpg')
-        self.photo = ImageTk.PhotoImage(self.image)
+        # open
+        image = Image.open('background.jpeg')
+        # resize
+        resized = image.resize((1000, 800), Image.ANTIALIAS)
+        self.photo = ImageTk.PhotoImage(resized)
         self.label = Label(image=self.photo)
         self.label.place(x=0, y=0)
 
@@ -688,23 +742,24 @@ class GUI(Tk):  # CLASS GUI
     # SAVE FUNCTION
 
     def save(self):  # mysql queries to insert data...
-        try:
-            self.cursor = self.conn.cursor()
+        if self.db_variable.get() == 1:
+            try:
+                self.cursor = self.conn.cursor()
 
-            self.cursor.execute('''insert into counts values(%s , %s , %s , %s , %s)''',
-                                (self.date, self.from_.get(), self.to.get(), self.amount.get(), str(self.result)))
+                self.cursor.execute('''insert into counts values(%s , %s , %s , %s , %s)''',
+                                    (self.date, self.from_.get(), self.to.get(), self.amount.get(), str(self.result)))
 
-            self.conn.commit()  # committing the transactions in db..
-
-            self.cursor.close()
-
-        except Exception as e:
-            tmsg.showerror('Input Error', 'Invalid input or Database not connected.')
+                self.conn.commit()  # committing the transactions in db..
+                self.cursor.close()
+            except:
+                tmsg.showerror('Input Error', 'Invalid Input for Amount')
+        else:
+            tmsg.showerror('Database Error', 'Please Connect Database')
 
             # SHOW DATA FUNCTION...
 
     def showdata(self):
-        try:
+        if self.db_variable.get() == 1:
             self.cursor = self.conn.cursor()  # again creating the cursor object -'self.cursor'
             self.cursor.execute('select * from counts')
             self.mydata = self.cursor.fetchall()  # 'fetchall()'-to retrieve all the rows of the table...
@@ -722,8 +777,8 @@ class GUI(Tk):  # CLASS GUI
             for data in self.mydata:
                 TextArea.insert(END, f"{data}\n")
             self.cursor.close()
-        except Exception as e:
-            tmsg.showerror('Input Error', 'Invalid input or Database not connected.')
+        else:
+            tmsg.showerror('Database', 'Database not connected. Try connecting Database')
 
     def exit(self):
         qanswer = tmsg.askquestion("ASK", "Did you like it ?")
